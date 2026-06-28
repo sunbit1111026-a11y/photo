@@ -20,6 +20,8 @@ CORS(app)
 
 COMFYUI_URL = os.environ.get('COMFYUI_URL', 'http://127.0.0.1:8188')
 FREE_USE = True  # 免費使用
+PORT = int(os.environ.get('PORT', 5000))
+COMFYUI_INPUT_DIR = os.environ.get('COMFYUI_INPUT_DIR', '/tmp/comfyui_input')
 
 # 記憶體儲存
 orders = {}
@@ -338,7 +340,7 @@ def upload_image():
         img.save(filepath)
         
        # 上傳到 ComfyUI 的 input 目錄 (讓 LoadImage 能讀到)
-        comfy_input_dir = 'D:/ai_work/ComfyUI/input'
+        comfy_input_dir = COMFYUI_INPUT_DIR
         os.makedirs(comfy_input_dir, exist_ok=True)
         
         # 生成唯一檔名避免覆蓋
@@ -377,7 +379,7 @@ def upload_secondary_image():
         img.save(filepath)
         
         # 上傳到 ComfyUI 的 input 目錄
-        comfy_input_dir = 'D:/ai_work/ComfyUI/input'
+        comfy_input_dir = COMFYUI_INPUT_DIR
         os.makedirs(comfy_input_dir, exist_ok=True)
         
         import datetime
@@ -591,7 +593,7 @@ def process_img2img(order_id):
 # ==================== 啟動 ====================
 
 if __name__ == '__main__':
-    host = os.environ.get('FLASK_HOST', '127.0.0.1')
+    app.run(host='0.0.0.0', port=PORT, debug=True)
     port = int(os.environ.get('FLASK_PORT', '5000'))
     print(f'🚀 服務啟動於 http://{host}:{port}')
     print(f'💻 ComfyUI: {COMFYUI_URL}')

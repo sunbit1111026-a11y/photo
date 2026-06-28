@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ai-image-shop
+    env: docker
+    plan: free
+    envVars:
+      - key: COMFYUI_URL
+        value: http://localhost:8188
+      - key: COMFYUI_INPUT_DIR
+        value: /tmp/comfyui_input
+      - key: FREE_USE
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
