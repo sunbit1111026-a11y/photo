@@ -4,6 +4,8 @@ services:
     env: docker
     plan: free
     envVars:
+      - key: NGROK_URL
+        value: https://congested-drizzle-unpinned.ngrok-free.dev
       - key: COMFYUI_URL
         value: http://localhost:8188
       - key: COMFYUI_INPUT_DIR

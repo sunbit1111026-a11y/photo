@@ -18,7 +18,13 @@ load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-COMFYUI_URL = os.environ.get('COMFYUI_URL', 'http://127.0.0.1:8188')
+# 優先使用 ngrok URL，本地開發用 localhost
+NGROK_URL = os.environ.get('NGROK_URL', '')
+if NGROK_URL:
+    COMFYUI_URL = NGROK_URL
+else:
+    COMFYUI_URL = os.environ.get('COMFYUI_URL', 'http://127.0.0.1:8188')
+print(f'📡 ComfyUI 連線: {COMFYUI_URL}')
 FREE_USE = True  # 免費使用
 PORT = int(os.environ.get('PORT', 5000))
 COMFYUI_INPUT_DIR = os.environ.get('COMFYUI_INPUT_DIR', '/tmp/comfyui_input')
