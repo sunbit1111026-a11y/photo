@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 圖片修改工坊</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.2em;
+            background: linear-gradient(90deg, #f7931a, #ff6b6b, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        header p {
+            color: #999;
+            font-size: 1em;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 15px;
+        }
+
+        .card h2 {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #f7931a;
+        }
+
+        /* 服務狀態 */
+        .service-status { text-align: center; margin-bottom: 15px; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .status-dot.online { background: #22c55e; }
+        .status-dot.offline { background: #ef4444; }
+
+        /* 雙欄佈局 */
+        .dual-upload {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .upload-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .upload-panel h3 {
+            font-size: 1em;
+            color: #ccc;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .upload-zone {
+            width: 100%;
+            min-height: 220px;
+            border: 2px dashed rgba(247,147,26,0.4);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #f7931a;
+            background: rgba(247,147,26,0.05);
+        }
+
+        .upload-zone .icon { font-size: 2.5em; margin-bottom: 8px; }
+        .upload-zone p { color: #999; font-size: 0.9em; }
+        .upload-zone .sub { color: #666; font-size: 0.75em; margin-top: 4px; }
+        .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+        /* 圖片預覽 */
+        .preview-box {
+            width: 100%;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .preview-box img {
+            width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 8px;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3);
+        }
+
+        .preview-info {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .remove-btn {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        .remove-btn:hover { background: rgba(239,68,68,0.4); }
+
+        /* 提示詞區 */
+        .prompt-section {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9em;
+            color: #ccc;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            background: rgba(0,0,0,0.3);
+            color: #e0e0e0;
+            font-size: 0.95em;
+            resize: vertical;
+            font-family: inherit;
+            margin-bottom: 12px;
+        }
+
+        textarea:focus { outline: none; border-color: #f7931a; }
+        textarea::placeholder { color: #666; }
+
+        .hint {
+            color: #888;
+            font-size: 0.8em;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+        .hint code {
+            background: rgba(247,147,26,0.15);
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: #f7931a;
+            font-size: 0.9em;
+        }
+
+        /* 滑桿 */
+ 
+
+        /* 按鈕 */
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(90deg, #f7931a, #e8850a);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(247,147,26,0.3);
+        }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* 進度 */
+        .progress-section { display: none; margin-bottom: 20px; }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f7931a, #a855f7);
+            border-radius: 4px;
+            transition: width 0.5s;
+        }
+        .status-msg {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-weight: 500;
+        }
+        .status-processing { background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
+        .status-success { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+        .status-error { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+
+        /* 結果 */
+        .result-section { display: none; }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .comparison-item { text-align: center; }
+        .comparison-item h4 { font-size: 0.85em; color: #999; margin-bottom: 8px; }
+        .comparison-item img {
+            width: 100%;
+            max-height: 350px;
+            object-fit: contain;
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3);
+        }
+        .btn-download {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 8px;
+            transition: all 0.3s;
+        }
+        .btn-download:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(34,197,94,0.3); }
+
+        .footer { text-align: center; color: #666; margin-top: 20px; font-size: 0.8em; }
+
+        /* 價格方案區塊 */
+        .pricing-card {
+            background: linear-gradient(135deg, rgba(247,147,26,0.1), rgba(168,85,247,0.1));
+            border: 1px solid rgba(247,147,26,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .pricing-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            background: linear-gradient(90deg, #f7931a, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+        .pricing-subtitle {
+            font-size: 0.85em;
+            color: #999;
+            margin-bottom: 15px;
+        }
+        .pricing-price {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #f7931a;
+            margin: 10px 0;
+        }
+        .pricing-price span { font-size: 0.4em; color: #888; }
+        .pricing-features {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0;
+            text-align: left;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .pricing-features li {
+            padding: 6px 0;
+            color: #ccc;
+            font-size: 0.85em;
+        }
+        .pricing-features li::before {
+            content: '✅ ';
+        }
+        .pricing-urgency {
+            color: #ff6b6b;
+            font-size: 0.85em;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .cooldown-info {
+            padding: 10px;
+            background: rgba(247,147,26,0.1);
+            border: 1px solid rgba(247,147,26,0.3);
+            border-radius: 8px;
+            text-align: center;
+            color: #f7931a;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .dual-upload { grid-template-columns: 1fr; }
+            .comparison { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎨 AI 圖片修改工坊</h1>
+            <p>上傳圖片 → 輸入描述 → AI 處理 → 下載結果</p>
+        </header>
+
+        <!-- 服務狀態 -->
+        <div class="service-status" id="serviceStatus">
+            <span class="status-dot offline"></span> 檢查中...
+        </div>
+
+        <!-- 雙欄上傳區 -->
+        <div class="card">
+            <div class="dual-upload">
+                <!-- 左欄：主圖片 -->
+                <div class="upload-panel">
+                    <h3>📷 主圖片（人物/場景）</h3>
+                    <div class="upload-zone" id="dropZone">
+                        <div class="icon">📤</div>
+                        <p>拖放圖片至此或點擊選擇</p>
+                        <p class="sub">JPG / PNG / WEBP（最大 10MB）</p>
+                        <input type="file" id="fileInput" accept="image/*">
+                    </div>
+                    <div class="preview-box" id="previewArea">
+                        <img id="previewImg" src="" alt="預覽">
+                        <div class="preview-info">
+                            <span id="fileName"></span>
+                            <button class="remove-btn" onclick="removeImage()">✕ 移除</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右欄：服飾參考圖 -->
+                <div class="upload-panel">
+                    <h3>👗 服飾參考圖（可選）</h3>
+                    <div class="upload-zone" id="secondaryDropZone">
+                        <div class="icon">👚</div>
+                        <p>拖放服飾/配件參考圖至此</p>
+                        <p class="sub">替換角色穿著的服飾或配件</p>
+                        <input type="file" id="secondaryFileInput" accept="image/*">
+                    </div>
+                    <div class="preview-box" id="secondaryPreviewArea">
+                        <img id="secondaryPreviewImg" src="" alt="服飾參考圖">
+                        <div class="preview-info">
+                            <span id="secondaryFileName"></span>
+                            <button class="remove-btn" onclick="removeSecondaryImage()">✕ 移除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改指令區 -->
+            <div class="prompt-section">
+                <label for="promptInput">✨ 怎麼改圖（修改描述）</label>
+                <textarea id="promptInput" placeholder="描述你想要什麼效果&#10;例如：把衣服換成右邊那件紅色連衣裙，變成3D手辦風格，精緻的細節"></textarea>
+
+                <div class="cooldown-info" id="cooldownInfo" style="display:none;"></div>
+                <div id="pricingSection" style="margin-top:20px;"></div>
+
+                <button class="btn-primary" id="btnSubmit" onclick="submitOrder()">🚀 開始 AI 處理</button>
+            </div>
+        </div>
+
+        <!-- 進度區 -->
+        <div class="card progress-section" id="progressSection">
+            <h2>⏳ AI 正在處理</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="processProgress" style="width: 15%"></div>
+            </div>
+            <div class="status-msg status-processing" id="processStatus">
+                正在等待排程...
+            </div>
+            <p style="color:#888; font-size:0.85em; text-align:center;" id="processInfo">
+                通常需 1-5 分鐘
+            </p>
+        </div>
+
+        <!-- 結果區 -->
+        <div class="card result-section" id="resultSection">
+            <h2>🎉 AI 修改結果</h2>
+            <div id="resultSuccess" style="display:none;">
+                <div class="comparison-item">
+                    <img id="resultImg" src="" alt="AI 修改結果">
+                </div>
+                <p style="text-align:center; color:#888; font-size:0.85em; margin:12px 0;" id="resultPrompt"></p>
+                <div style="text-align:center;">
+                    <a class="btn-download" id="downloadBtn" href="#" download="AI_結果.png">📥 下載結果</a>
+                    <a class="btn-download" style="background:linear-gradient(90deg,#f7931a,#e8850a);color:#000;" href="/">🔄 再處理一張</a>
+                </div>
+            </div>
+            <div id="resultError" style="display:none;">
+                <div class="status-msg status-error" id="errorDetail"></div>
+                <div style="text-align:center; margin-top:15px;">
+                    <button class="btn-primary" onclick="retryOrder()" style="margin-bottom:8px;">🔄 重新處理</button>
+                    <button class="btn-primary" onclick="window.location.href='/'" style="background:linear-gradient(90deg,#f7931a,#e8850a);">🏠 返回首頁</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by ComfyUI + Stable Diffusion</p>
+        </div>
+    </div>
+
+    <script>
+        let currentOrder = null;
+        let statusTimer = null;
+        let originalImageSrc = null;
+        let secondaryImageSrc = null;
+        let secondaryFileData = null;
+
+        // 初始化
+        checkService();
+
+        async function checkService() {
+            try {
+                const r = await fetch('/api/status');
+                const data = await r.json();
+                const el = document.getElementById('serviceStatus');
+                if (data.comfyui_connected) {
+                    el.innerHTML = '<span class="status-dot online"></span> ComfyUI 已連線';
+                } else {
+                    el.innerHTML = '<span class="status-dot offline"></span> ComfyUI 未連線';
+                }
+                
+                // 渲染價格方案 + 檢查限速
+                renderPricing(data.free_use);
+                checkCooldown();
+            } catch(e) {
+                document.getElementById('serviceStatus').innerHTML = '<span class="status-dot offline"></span> 後端連線失敗';
+            }
+        }
+        
+        // ===== 渲染價格方案 =====
+        function renderPricing(isFree) {
+            const section = document.getElementById('pricingSection');
+            const endDate = new Date('2026-06-30T23:59:59');
+            const now = new Date();
+            const daysLeft = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+            
+            if (isFree && daysLeft > 0) {
+                section.innerHTML = `
+                    <div class="pricing-card">
+                        <div class="pricing-title">🎉 限時免費體驗!!</div>
+                        <div class="pricing-subtitle">現在起至 6/30 — 所有功能免費暢用，不限次數！</div>
+                        <div class="pricing-urgency">⏰ 免費期只剩 ${daysLeft} 天，錯過要等到下次促銷！</div>
+                    </div>
+                `;
+            } else {
+                section.innerHTML = `
+                    <div class="pricing-card">
+                        <div class="pricing-title">🚀 正式方案上線</div>
+                        <div class="pricing-price">$1 <span>USD / 次</span></div>
+                        <ul class="pricing-features">
+                            <li>不限次數，想用多少次就多少次</li>
+                            <li>雙圖參考輸入，服飾配件隨意換</li>
+                            <li>Lightning 4 步快速出圖</li>
+                            <li>高解析度輸出，商用社群都 OK</li>
+                        </ul>
+                        <div class="pricing-subtitle">約新台幣 32 元 — 比一杯手搖飲便宜，得到一張專業級 AI 生成圖</div>
+                    </div>
+                `;
+            }
+        }
+        
+        // ===== IP 限速 10 分鐘 =====
+        async function checkCooldown() {
+            try {
+                const r = await fetch('/api/cooldown_check');
+                const data = await r.json();
+                const infoEl = document.getElementById('cooldownInfo');
+                const btn = document.getElementById('btnSubmit');
+                
+                if (data.cooldown_active) {
+                    const minsLeft = Math.ceil(data.remaining / 60);
+                    infoEl.style.display = 'block';
+                    infoEl.innerHTML = `⏳ 已使用過，請等待 ${minsLeft} 分鐘後再試<br><small>每 10 分鐘可生成一次</small>`;
+                    btn.disabled = true;
+                    btn.textContent = '⏳ 冷卻中...';
+                    
+                    // 每秒更新倒數
+                    const interval = setInterval(async () => {
+                        try {
+                            const r2 = await fetch('/api/cooldown_check');
+                            const d2 = await r2.json();
+                            if (!d2.cooldown_active) {
+                                clearInterval(interval);
+                                infoEl.style.display = 'none';
+                                btn.disabled = false;
+                                btn.textContent = '🚀 開始 AI 處理';
+                            } else {
+                                const m = Math.ceil(d2.remaining / 60);
+                                infoEl.innerHTML = `⏳ 已使用過，請等待 ${m} 分鐘後再試<br><small>每 10 分鐘可生成一次</small>`;
+                            }
+                        } catch(e) {}
+                    }, 10000);
+                }
+            } catch(e) {}
+        }
+
+        // ===== 主圖片上傳 =====
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+
+        fileInput.addEventListener('change', handleFile);
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFile(); }
+        });
+
+        function handleFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            if (file.size > 10 * 1024 * 1024) { alert('檔案太大（最大 10MB）'); return; }
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('previewArea').style.display = 'flex';
+                document.getElementById('dropZone').style.display = 'none';
+                document.getElementById('fileName').textContent = file.name + ' (' + formatSize(file.size) + ')';
+                originalImageSrc = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            fileInput.value = '';
+            document.getElementById('previewArea').style.display = 'none';
+            document.getElementById('dropZone').style.display = 'flex';
+            document.getElementById('previewImg').src = '';
+            originalImageSrc = null;
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            return (bytes/(1024*1024)).toFixed(1) + ' MB';
+        }
+
+        // ===== 服飾參考圖上傳 =====
+        const secondaryFileInput = document.getElementById('secondaryFileInput');
+        const secondaryDropZone = document.getElementById('secondaryDropZone');
+
+        secondaryFileInput.addEventListener('change', handleSecondaryFile);
+        secondaryDropZone.addEventListener('dragover', e => { e.preventDefault(); secondaryDropZone.classList.add('dragover'); });
+        secondaryDropZone.addEventListener('dragleave', () => secondaryDropZone.classList.remove('dragover'));
+        secondaryDropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            secondaryDropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) { secondaryFileInput.files = e.dataTransfer.files; handleSecondaryFile(); }
+        });
+
+        function handleSecondaryFile() {
+            const file = secondaryFileInput.files[0];
+            if (!file) return;
+            if (file.size > 10 * 1024 * 1024) { alert('檔案太大（最大 10MB）'); return; }
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById('secondaryPreviewImg').src = e.target.result;
+                document.getElementById('secondaryPreviewArea').style.display = 'flex';
+                document.getElementById('secondaryDropZone').style.display = 'none';
+                document.getElementById('secondaryFileName').textContent = file.name + ' (' + formatSize(file.size) + ')';
+                secondaryImageSrc = e.target.result;
+                secondaryFileData = file;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeSecondaryImage() {
+            secondaryFileInput.value = '';
+            document.getElementById('secondaryPreviewArea').style.display = 'none';
+            document.getElementById('secondaryDropZone').style.display = 'flex';
+            document.getElementById('secondaryPreviewImg').src = '';
+            secondaryImageSrc = null;
+            secondaryFileData = null;
+        }
+
+        // ===== 提交訂單 =====
+        async function submitOrder() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            if (!prompt) { alert('請輸入修改描述'); return; }
+            if (!fileInput.files[0]) { alert('請上傳主圖片'); return; }
+
+            const btn = document.getElementById('btnSubmit');
+            btn.disabled = true;
+            btn.textContent = '上傳處理中...';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('resultSection').style.display = 'none';
+
+            let secondaryComfyFilename = null;
+
+            try {
+                // 上傳主圖片
+                const formData = new FormData();
+                formData.append('image', fileInput.files[0]);
+                const r1 = await fetch('/api/upload', { method: 'POST', body: formData });
+                const uploadData = await r1.json();
+                if (!r1.ok) throw new Error(uploadData.error || '主圖片上傳失敗');
+
+                // 上傳服飾參考圖
+                if (secondaryFileData) {
+                    const secondaryFormData = new FormData();
+                    secondaryFormData.append('image', secondaryFileData);
+                    const r2 = await fetch('/api/upload_secondary', { method: 'POST', body: secondaryFormData });
+                    const secondaryUploadData = await r2.json();
+                    if (!r2.ok) throw new Error(secondaryUploadData.error || '第二張圖片上傳失敗');
+                    secondaryComfyFilename = secondaryUploadData.comfy_filename || secondaryUploadData.filename;
+                }
+
+                // 提交訂單
+                const r3 = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_filename: uploadData.comfy_filename || uploadData.filename,
+                        secondary_filename: secondaryComfyFilename,
+                        prompt: prompt
+                    })
+                });
+                const orderData = await r3.json();
+                if (!r3.ok) throw new Error(orderData.error || '提交失敗');
+
+                currentOrder = orderData.order_id;
+                document.getElementById('processStatus').textContent = '🔄 AI 正在處理...';
+                document.getElementById('processProgress').style.width = '40%';
+                startPolling();
+
+            } catch(e) {
+                alert('錯誤：' + e.message);
+                btn.disabled = false;
+                btn.textContent = '🚀 開始 AI 處理';
+                document.getElementById('progressSection').style.display = 'none';
+            }
+        }
+
+        // ===== 輪詢 =====
+        function startPolling() {
+            if (statusTimer) clearInterval(statusTimer);
+            const statusEl = document.getElementById('processStatus');
+            const progressEl = document.getElementById('processProgress');
+            const infoEl = document.getElementById('processInfo');
+
+            statusTimer = setInterval(async () => {
+                try {
+                    const r = await fetch(`/api/order/${currentOrder}/status`);
+                    const data = await r.json();
+
+                    if (data.status === 'processing') {
+                        statusEl.className = 'status-msg status-processing';
+                        statusEl.textContent = '🔄 AI 正在處理...';
+                        progressEl.style.width = '60%';
+                        infoEl.textContent = '提示詞：' + (data.prompt || '');
+                    } else if (data.status === 'completed') {
+                        showResult(true, data);
+                        clearInterval(statusTimer);
+                    } else if (data.status === 'failed') {
+                        showResult(false, data);
+                        clearInterval(statusTimer);
+                    }
+                } catch(e) {}
+            }, 3000);
+        }
+
+        function showResult(success, data) {
+            document.getElementById('resultSection').style.display = 'block';
+            document.getElementById('progressSection').style.display = 'none';
+            const btn = document.getElementById('btnSubmit');
+            btn.disabled = false;
+            btn.textContent = '🚀 開始 AI 處理';
+
+            if (success) {
+                document.getElementById('resultSuccess').style.display = 'block';
+                document.getElementById('resultError').style.display = 'none';
+                document.getElementById('resultImg').src = `/api/order/${currentOrder}/download?t=${Date.now()}`;
+                document.getElementById('downloadBtn').href = `/api/order/${currentOrder}/download?t=${Date.now()}`;
+                document.getElementById('resultPrompt').textContent = '修改需求：' + (data.prompt || '');
+            } else {
+                document.getElementById('resultSuccess').style.display = 'none';
+                document.getElementById('resultError').style.display = 'block';
+                document.getElementById('errorDetail').textContent = '❌ ' + (data.error || '處理失敗');
+            }
+        }
+
+        function retryOrder() {
+            document.getElementById('resultSection').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('processStatus').textContent = '🔄 重新處理中...';
+            startPolling();
+        }
+
+        // 初始化
+        checkService();
+    </script>
+</body>
+</html>

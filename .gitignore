@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+
+# Flask
+instance/
+.webassets-cache
+
+# ComfyUI input images
+D:/ai_work/ComfyUI/input/*.jpg
+D:/ai_work/ComfyUI/input/*.png
+D:/ai_work/ComfyUI/input/*.webp
+
+# Local input_images folder
+input_images/
+input_images/*.jpg
+input_images/*.png
+input_images/*.webp
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Output images from ComfyUI
+D:/ai_work/ComfyUI/output/

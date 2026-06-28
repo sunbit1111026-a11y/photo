@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>訂單 #{{ order.id }} | AI 圖片改造</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+        .container { max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 15px; }
+        .card h2 { color: #f7931a; margin-bottom: 15px; }
+        .wallet { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; font-family: monospace; word-break: break-all; color: #f7931a; margin: 10px 0; }
+        .amount { font-size: 2em; font-weight: bold; color: #f7931a; text-align: center; margin: 20px 0; }
+        .status { padding: 10px; border-radius: 8px; text-align: center; font-weight: 500; }
+        .status-pending { background: rgba(247,147,26,0.15); color: #f7931a; }
+        .status-paid { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-processing { background: rgba(168,85,247,0.15); color: #a855f7; }
+        .status-completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-failed { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .btn { display: block; width: 100%; padding: 12px; background: #f7931a; color: #000; border: none; border-radius: 8px; font-size: 1em; font-weight: bold; cursor: pointer; text-align: center; text-decoration: none; margin-top: 10px; }
+        .btn-download { background: #22c55e; color: #fff; }
+        .btn-home { background: rgba(255,255,255,0.1); color: #ccc; }
+        .timer { text-align: center; color: #ff6b6b; margin-top: 10px; }
+        .tx-hash { font-family: monospace; font-size: 0.85em; color: #888; word-break: break-all; }
+        .prompt-display { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; margin-top: 10px; color: #ccc; line-height: 1.6; }
+        .result img { max-width: 100%; border-radius: 8px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align:center; color: #f7931a; margin-bottom: 20px;">🎨 AI 圖片改造工坊</h1>
+        <div class="card">
+            <h2>訂單 #{{ order.id }}</h2>
+            
+            <div class="amount">{{ order.amount }} USDT</div>
+            
+            <p style="text-align:center; color:#888; font-size:0.9em;">收款地址 (TRC-20):</p>
+            <div class="wallet" onclick="copyAddress()">{{ order.wallet }}</div>
+            
+            <div style="text-align:center;">
+                <button onclick="copyAddress()" style="background:rgba(255,255,255,0.1); color:#ccc; border:none; padding:8px 20px; border-radius:6px; cursor:pointer;">📋 複製地址</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>修改需求</h2>
+            <div class="prompt-display">{{ order.prompt }}</div>
+        </div>
+
+        <div class="card">
+            <h2>訂單狀態</h2>
+            <div id="statusBox"></div>
+            <div class="timer" id="timerBox"></div>
+        </div>
+
+        <div id="resultBox" style="display:none;" class="card">
+            <h2>處理結果</h2>
+            <div class="result" id="resultContent"></div>
+        </div>
+
+        <a href="/" class="btn btn-home">← 首頁</a>
+    </div>
+
+    <script>
+        const orderId = '{{ order.id }}';
+        let pollTimer;
+
+        async function checkStatus() {
+            try {
+                const r = await fetch(`/api/order/${orderId}/status`);
+                const data = await r.json();
+                updateStatusUI(data);
+            } catch(e) {}
+        }
+
+        async function checkProcess() {
+            try {
+                const r = await fetch(`/api/order/${orderId}/process`);
+                const data = await r.json();
+                const statusBox = document.getElementById('statusBox');
+                const processTimer = document.getElementById('timerBox');
+                
+                if (data.status === 'processing') {
+                    statusBox.innerHTML = '<div class="status status-processing">⏳ AI 正在處理...</div>';
+                    processTimer.textContent = '通常 1-5 分鐘完成';
+                    
+                    if (data.progress && data.progress.completed) {
+                        statusBox.innerHTML = '<div class="status status-paid">✅ 處理完成！</div>';
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function updateStatusUI(data) {
+            const statusBox = document.getElementById('statusBox');
+            const timerBox = document.getElementById('timerBox');
+            const resultBox = document.getElementById('resultBox');
+            
+            const statusClass = {
+                'pending': 'status-pending',
+                'paid': 'status-paid',
+                'processing': 'status-processing',
+                'completed': 'status-completed',
+                'failed': 'status-failed'
+            }[data.status] || 'status-pending';
+
+            const statusText = {
+                'pending': '⏳ 等待付款...',
+                'paid': '✅ 已付款，等待處理...',
+                'processing': '⏳ AI 正在處理...',
+                'completed': '✅ 處理完成！',
+                'failed': '❌ 處理失敗，請重新嘗試'
+            }[data.status] || data.status;
+
+            statusBox.innerHTML = `<div class="status ${statusClass}">${statusText}</div>`;
+            
+            if (data.tx_hash) {
+                statusBox.innerHTML += `<div class="tx-hash" style="margin-top:10px;">TX: ${data.tx_hash}</div>`;
+            }
+
+            // 計時
+            const now = new Date().getTime();
+            const expires = new Date(data.expires_at).getTime();
+            const remaining = Math.max(0, expires - now);
+            if (data.status === 'pending' && remaining > 0) {
+                const m = Math.floor(remaining / 60000);
+                const s = Math.floor((remaining % 60000) / 1000);
+                timerBox.textContent = `剩餘 ${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            } else {
+                timerBox.textContent = '';
+            }
+
+            // 結果
+            if (data.status === 'completed' && data.result_url) {
+                resultBox.style.display = 'block';
+                document.getElementById('resultContent').innerHTML = `
+                    <img src="/api/order/${orderId}/download" alt="結果">
+                    <a href="/api/order/${orderId}/download" class="btn btn-download" download>📥 下載圖片</a>
+                `;
+            }
+        }
+
+        function copyAddress() {
+            navigator.clipboard.writeText('{{ order.wallet }}');
+            alert('已複製錢包地址');
+        }
+
+        // 每3秒輪詢
+        checkStatus();
+        pollTimer = setInterval(checkStatus, 3000);
+    </script>
+</body>
+</html>

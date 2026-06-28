@@ -1,0 +1,9 @@
+from PIL import Image, ImageDraw
+
+img = Image.new('RGB', (512, 512), color=(100, 150, 255))
+draw = ImageDraw.Draw(img)
+draw.rectangle([100, 100, 400, 400], fill=(255, 100, 100))
+draw.ellipse([150, 150, 350, 350], fill=(100, 255, 100))
+draw.text((180, 240), "TEST", fill=(0, 0, 0))
+img.save(r'C:\Users\test\test_image.png')
+print('Created test image')
