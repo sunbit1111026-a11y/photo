@@ -588,7 +588,7 @@ def process_img2img(order_id):
             print(f'[處理] 訂單 {order_id} 已提交 prompt_id={order["prompt_id"]}')
             
             # 輪詢等待完成 (最多 3 分鐘)
-            max_wait = 180
+            max_wait = int(os.environ.get('COMFYUI_MAX_WAIT', '900'))
             start = time.time()
             
             while time.time() - start < max_wait:
@@ -613,7 +613,7 @@ def process_img2img(order_id):
                 time.sleep(5)
             
             order['status'] = 'failed'
-            order['error'] = '處理超時 (3分鐘)'
+            order['error'] = f'處理超時 ({max_wait // 60}分鐘)'
             print(f'[超時] 訂單 {order_id}')
             
         else:
