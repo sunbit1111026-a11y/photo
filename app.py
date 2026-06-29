@@ -261,7 +261,7 @@ def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1
                 "negative": ["212", 0],
                 "latent": ["200", 0],
                 "seed": seed_val,
-                "steps": 4,
+                "steps": 2,
                 "cfg": 1.0,
                 "sampler": "euler",
                 "scheduler": "simple",
