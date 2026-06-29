@@ -49,7 +49,7 @@ def upload_to_comfyui(filepath, original_filename, content_type):
 # 記憶體儲存
 orders = {}
 cooldown_records = {}  # IP -> last_submit_time
-COOLDOWN_SECONDS = 600  # 10 分鐘
+COOLDOWN_SECONDS = int(os.environ.get('COOLDOWN_SECONDS', '0'))  # 0 = disabled
 
 # ==================== 50-Qwe-Image-2511 多LoRA切換工作流 ====================
 def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1.0, lora_index=0, image2_filename=None):
@@ -319,6 +319,14 @@ def api_status():
 @app.route('/api/cooldown_check')
 def cooldown_check():
     """檢查當前 IP 是否在冷卻時間內"""
+    if COOLDOWN_SECONDS <= 0:
+        return jsonify({
+            'cooldown_active': False,
+            'remaining': 0,
+            'remaining_seconds': 0,
+            'remaining_display': '可以立即使用'
+        })
+
     client_ip = request.remote_addr or 'unknown'
     now = time.time()
 
@@ -463,8 +471,9 @@ def submit_order():
     orders[order_id] = order
     
     # 記錄 IP 冷卻時間
-    client_ip = request.remote_addr or 'unknown'
-    cooldown_records[client_ip] = time.time()
+    if COOLDOWN_SECONDS > 0:
+        client_ip = request.remote_addr or 'unknown'
+        cooldown_records[client_ip] = time.time()
     
     # 啟動背景處理
     threading.Thread(target=process_img2img, args=(order_id,), daemon=True).start()
