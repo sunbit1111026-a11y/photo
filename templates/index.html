@@ -178,6 +178,29 @@
         textarea:focus { outline: none; border-color: #f7931a; }
         textarea::placeholder { color: #666; }
 
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 8px 0 12px;
+        }
+        .preset-btn {
+            width: auto;
+            padding: 9px 14px;
+            border: 1px solid rgba(247,147,26,0.45);
+            border-radius: 8px;
+            background: rgba(247,147,26,0.12);
+            color: #fbbf24;
+            font-size: 0.9em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover {
+            background: rgba(247,147,26,0.22);
+            transform: translateY(-1px);
+        }
+
         .hint {
             color: #888;
             font-size: 0.8em;
@@ -400,6 +423,9 @@
             <!-- 修改指令區 -->
             <div class="prompt-section">
                 <label for="promptInput">✨ 怎麼改圖（修改描述）</label>
+                <div class="quick-actions">
+                    <button class="preset-btn" type="button" onclick="applyOutfitSwapPrompt()">圖1換圖2衣服</button>
+                </div>
                 <textarea id="promptInput" placeholder="描述你想要什麼效果&#10;例如：把衣服換成右邊那件紅色連衣裙，變成3D手辦風格，精緻的細節"></textarea>
 
                 <div class="cooldown-info" id="cooldownInfo" style="display:none;"></div>
@@ -456,6 +482,16 @@
         let originalImageSrc = null;
         let secondaryImageSrc = null;
         let secondaryFileData = null;
+        const OUTFIT_SWAP_PROMPT = 'Swap the entire outfit of the person in the first image with the complete clothing from the second image. Replace every piece of clothing precisely: top, bottom, jacket, shoes, accessories, and all visible details. Keep the exact same pose, body shape, proportions, face, hair, skin tone, lighting, and background from the first image. Transfer the exact style, color, texture, patterns, fit, folds, and material of the clothes from the second image onto the character. Highly detailed clothing swap, realistic fabric rendering, perfect match.';
+
+        function applyOutfitSwapPrompt() {
+            document.getElementById('promptInput').value = OUTFIT_SWAP_PROMPT;
+            if (!secondaryFileData) {
+                document.getElementById('secondaryDropZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                document.getElementById('promptInput').focus();
+            }
+        }
 
         // 初始化
         checkService();
