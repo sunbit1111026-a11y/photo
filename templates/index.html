@@ -444,6 +444,7 @@
             <div class="status-msg status-processing" id="processStatus">
                 正在等待排程...
             </div>
+            <div class="status-msg status-processing" id="countdownTimer" style="display:none; text-align:center; font-size:1.6em; font-weight:800; margin-top:10px;">02:00</div>
             <p style="color:#888; font-size:0.85em; text-align:center;" id="processInfo">
                 通常需 1-5 分鐘
             </p>
@@ -479,11 +480,38 @@
     <script>
         let currentOrder = null;
         let statusTimer = null;
+        let countdownTimer = null;
         let originalImageSrc = null;
         let secondaryImageSrc = null;
         let secondaryFileData = null;
-        const OUTFIT_SWAP_PROMPT = 'Swap the entire outfit of the person in the first image with the complete clothing from the second image. Replace every piece of clothing precisely: top, bottom, jacket, shoes, accessories, and all visible details. Keep the exact same pose, body shape, proportions, face, hair, skin tone, lighting, and background from the first image. Transfer the exact style, color, texture, patterns, fit, folds, and material of the clothes from the second image onto the character. Highly detailed clothing swap, realistic fabric rendering, perfect match.';
+        const OUTFIT_SWAP_PROMPT = 'Replace the person’s full outfit in the first image with the exact outfit shown in the second image. Preserve 100% consistency with the clothing in the second image, including the design, cut, colors, patterns, materials, textures, logos, accessories, and every visible clothing detail. Do not reinterpret, redesign, or simplify the outfit in any way. Maintain complete fidelity to the reference clothing. Keep the same pose, body shape, face, hair, lighting, camera angle, and background unchanged. Only replace the clothing. Realistic fabric details, accurate fit, high-detail clothing transfer.The clothing must be an exact 1:1 replica of the reference outfit in the second image with no deviations or creative interpretation. Preserve the reference outfit’s consistency across every visible clothing element.';
 
+
+        function startGenerationCountdown(seconds = 120) {
+            const timerEl = document.getElementById('countdownTimer');
+            if (!timerEl) return;
+            if (countdownTimer) clearInterval(countdownTimer);
+            let remaining = seconds;
+            const render = () => {
+                const mins = String(Math.floor(remaining / 60)).padStart(2, '0');
+                const secs = String(remaining % 60).padStart(2, '0');
+                timerEl.textContent = `${mins}:${secs}`;
+                timerEl.style.display = 'block';
+            };
+            render();
+            countdownTimer = setInterval(() => {
+                remaining = Math.max(0, remaining - 1);
+                render();
+                if (remaining <= 0) clearInterval(countdownTimer);
+            }, 1000);
+        }
+
+        function stopGenerationCountdown() {
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownTimer = null;
+            const timerEl = document.getElementById('countdownTimer');
+            if (timerEl) timerEl.style.display = 'none';
+        }
         function applyOutfitSwapPrompt() {
             document.getElementById('promptInput').value = OUTFIT_SWAP_PROMPT;
             if (!secondaryFileData) {
@@ -712,12 +740,14 @@
                 currentOrder = orderData.order_id;
                 document.getElementById('processStatus').textContent = '🔄 AI 正在處理...';
                 document.getElementById('processProgress').style.width = '40%';
+                startGenerationCountdown(120);
                 startPolling();
 
             } catch(e) {
                 alert('錯誤：' + e.message);
                 btn.disabled = false;
                 btn.textContent = '🚀 開始 AI 處理';
+                stopGenerationCountdown();
                 document.getElementById('progressSection').style.display = 'none';
             }
         }
@@ -742,9 +772,11 @@
                     } else if (data.status === 'completed') {
                         showResult(true, data);
                         clearInterval(statusTimer);
+                        stopGenerationCountdown();
                     } else if (data.status === 'failed') {
                         showResult(false, data);
                         clearInterval(statusTimer);
+                        stopGenerationCountdown();
                     }
                 } catch(e) {}
             }, 3000);
@@ -756,6 +788,7 @@
             const btn = document.getElementById('btnSubmit');
             btn.disabled = false;
             btn.textContent = '🚀 開始 AI 處理';
+            stopGenerationCountdown();
 
             if (success) {
                 document.getElementById('resultSuccess').style.display = 'block';
@@ -774,6 +807,7 @@
             document.getElementById('resultSection').style.display = 'none';
             document.getElementById('progressSection').style.display = 'block';
             document.getElementById('processStatus').textContent = '🔄 重新處理中...';
+            startGenerationCountdown(120);
             startPolling();
         }
 
