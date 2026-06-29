@@ -168,7 +168,7 @@ def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1
             "class_type": "XB_UNetBlockSwap",
             "inputs": {
                 "unet_model": ["203", 0],
-                "blocks_to_swap": 60
+                "blocks_to_swap": 0
             }
         },
         "115": {
