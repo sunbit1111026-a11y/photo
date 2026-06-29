@@ -29,6 +29,23 @@ FREE_USE = True  # 免費使用
 PORT = int(os.environ.get('PORT', 5000))
 COMFYUI_INPUT_DIR = os.environ.get('COMFYUI_INPUT_DIR', '/tmp/comfyui_input')
 
+def upload_to_comfyui(filepath, original_filename, content_type):
+    """Upload an image to ComfyUI and return the filename LoadImage should use."""
+    with open(filepath, 'rb') as f:
+        files = {'image': (original_filename, f, content_type or 'application/octet-stream')}
+        data = {'type': 'input', 'overwrite': 'true'}
+        resp = requests.post(f'{COMFYUI_URL}/upload/image', files=files, data=data, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f'ComfyUI 上傳失敗: {resp.text[:500]}')
+    result = resp.json()
+    comfy_filename = result.get('name') or result.get('filename')
+    subfolder = result.get('subfolder')
+    if subfolder:
+        comfy_filename = f'{subfolder}/{comfy_filename}'
+    if not comfy_filename:
+        raise RuntimeError(f'ComfyUI 上傳回應缺少檔名: {result}')
+    return comfy_filename
+
 # 記憶體儲存
 orders = {}
 cooldown_records = {}  # IP -> last_submit_time
@@ -345,16 +362,21 @@ def upload_image():
     try:
         img.save(filepath)
         
-       # 上傳到 ComfyUI 的 input 目錄 (讓 LoadImage 能讀到)
-        comfy_input_dir = COMFYUI_INPUT_DIR
-        os.makedirs(comfy_input_dir, exist_ok=True)
+        # 判斷是否為遠端 ComfyUI (Render 連線到 ngrok)
+        is_remote = not COMFYUI_URL.startswith('http://127.0.0.1') and not COMFYUI_URL.startswith('http://localhost')
         
-        # 生成唯一檔名避免覆蓋
-        import datetime
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        comfy_filename = f"upload_{timestamp}_{img.filename}"
-        comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
-        shutil.copy2(filepath, comfy_filepath)
+        if is_remote:
+            # Upload through ComfyUI's native API so LoadImage can find the file.
+            comfy_filename = upload_to_comfyui(filepath, img.filename, img.content_type)
+        else:
+            # 本地模式：複製到 ComfyUI input 資料夾
+            comfy_input_dir = COMFYUI_INPUT_DIR
+            os.makedirs(comfy_input_dir, exist_ok=True)
+            import datetime
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            comfy_filename = f"upload_{timestamp}_{img.filename}"
+            comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
+            shutil.copy2(filepath, comfy_filepath)
         
         return jsonify({
             'filename': filename,
@@ -383,17 +405,21 @@ def upload_secondary_image():
     
     try:
         img.save(filepath)
+        is_remote = not COMFYUI_URL.startswith('http://127.0.0.1') and not COMFYUI_URL.startswith('http://localhost')
         
-        # 上傳到 ComfyUI 的 input 目錄
-        comfy_input_dir = COMFYUI_INPUT_DIR
-        os.makedirs(comfy_input_dir, exist_ok=True)
-        
-        import datetime
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        comfy_filename = f"secondary_{timestamp}_{img.filename}"
-        comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
-        shutil.copy2(filepath, comfy_filepath)
-        
+        if is_remote:
+            comfy_filename = upload_to_comfyui(filepath, img.filename, img.content_type)
+        else:
+            # Copy to the local ComfyUI input directory.
+            comfy_input_dir = COMFYUI_INPUT_DIR
+            os.makedirs(comfy_input_dir, exist_ok=True)
+            
+            import datetime
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            comfy_filename = f"secondary_{timestamp}_{img.filename}"
+            comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
+            shutil.copy2(filepath, comfy_filepath)
+
         return jsonify({
             'filename': filename,
             'comfy_filename': comfy_filename,
@@ -407,9 +433,11 @@ def submit_order():
     """提交修改需求"""
     data = request.json
     image_filename = data.get('image_filename')
-    secondary_filename = data.get('secondary_filename')  # 第二張圖片 (服飾/配件參考圖)
+    image_comfy_filename = data.get('image_comfy_filename') or data.get('image_filename')  # ComfyUI 真實檔名
+    secondary_filename = data.get('secondary_filename')
+    secondary_comfy_filename = data.get('secondary_comfy_filename')  # 第二張 ComfyUI 檔名
     prompt_text = data.get('prompt', '')
-    negative_prompt = data.get('negative_prompt', 'lowres, bad anatomy, worst quality, blur')
+    negative_prompt = data.get('negative_prompt', 'lowres, bad anatomy, worst quality')
     denoise = float(data.get('denoise', '0.75'))
     
     if not image_filename or not prompt_text:
@@ -420,7 +448,9 @@ def submit_order():
     order = {
         'id': order_id,
         'image_filename': image_filename,
-        'secondary_filename': secondary_filename,  # 第二張圖片
+        'image_comfy_filename': image_comfy_filename if image_comfy_filename else image_filename,
+        'secondary_filename': secondary_filename,
+        'secondary_comfy_filename': secondary_comfy_filename if secondary_comfy_filename else secondary_filename,
         'prompt': prompt_text,
         'negative_prompt': negative_prompt,
         'denoise': denoise,
@@ -531,13 +561,17 @@ def process_img2img(order_id):
     print(f'[處理] 訂單 {order_id} 開始')
     
     try:
+        # 使用 ComfyUI 檔名（讓 LoadImage 能正確找到檔案）
+        comfy_img = order.get('image_comfy_filename', order['image_filename'])
+        comfy_img2 = order.get('secondary_comfy_filename')
+        
         # 讀取 workflow
         workflow = get_img2img_workflow(
-            order['image_filename'],
+            comfy_img,
             order['prompt'],
             order.get('negative_prompt', 'lowres, bad anatomy'),
             order.get('denoise', 0.75),
-            image2_filename=order.get('secondary_filename')  # 第二張圖片 (服飾/配件參考圖)
+            image2_filename=comfy_img2  # 第二張圖片 (服飾/配件參考圖)
         )
         
         # 提交到 ComfyUI
@@ -599,10 +633,5 @@ def process_img2img(order_id):
 # ==================== 啟動 ====================
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=PORT, debug=True)
-    port = int(os.environ.get('FLASK_PORT', '5000'))
-    print(f'🚀 服務啟動於 http://{host}:{port}')
-    print(f'💻 ComfyUI: {COMFYUI_URL}')
-    print(f'💰 模式: 免費使用')
-    
-    app.run(host=host, port=port, debug=True)
+    host = os.environ.get('HOST', '0.0.0.0')
+    app.run(host=host, port=PORT, debug=False)
