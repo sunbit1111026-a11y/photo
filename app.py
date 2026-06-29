@@ -186,20 +186,10 @@ def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1
                 "image": image_filename
             }
         },
-        "230": {
-            "class_type": "ImageScale",
-            "inputs": {
-                "image": ["220", 0],
-                "upscale_method": "lanczos",
-                "width": 768,
-                "height": 1024,
-                "crop": "center"
-            }
-        },
         "215": {
              "class_type": "FluxKontextImageScale",
              "inputs": {
-                 "image": ["230", 0]
+                 "image": ["220", 0]
              }
          },
          "221": {
@@ -208,20 +198,10 @@ def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1
                   "image": image2_filename if image2_filename else "empty.png"
               }
           },
-          "231": {
-              "class_type": "ImageScale",
-              "inputs": {
-                  "image": ["221", 0],
-                  "upscale_method": "lanczos",
-                  "width": 768,
-                  "height": 1024,
-                  "crop": "center"
-              }
-          },
           "216": {
               "class_type": "FluxKontextImageScale",
               "inputs": {
-                  "image": ["231", 0]
+                  "image": ["221", 0]
               }
           },
         
@@ -281,7 +261,7 @@ def get_img2img_workflow(image_filename, prompt_text, negative_prompt, denoise=1
                 "negative": ["212", 0],
                 "latent": ["200", 0],
                 "seed": seed_val,
-                "steps": 3,
+                "steps": 4,
                 "cfg": 1.0,
                 "sampler": "euler",
                 "scheduler": "simple",
