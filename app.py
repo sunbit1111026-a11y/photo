@@ -28,13 +28,75 @@ print(f'📡 ComfyUI 連線: {COMFYUI_URL}')
 FREE_USE = True  # 免費使用
 PORT = int(os.environ.get('PORT', 5000))
 COMFYUI_INPUT_DIR = os.environ.get('COMFYUI_INPUT_DIR', '/tmp/comfyui_input')
+COMFY_PROXY_TOKEN = os.environ.get('COMFY_PROXY_TOKEN', '')
+MAX_IMAGE_MB = int(os.environ.get('MAX_IMAGE_MB', '10'))
+MAX_ACTIVE_JOBS = int(os.environ.get('MAX_ACTIVE_JOBS', '1'))
+MAX_STORED_ORDERS = int(os.environ.get('MAX_STORED_ORDERS', '50'))
+MAX_COMFY_QUEUE = int(os.environ.get('MAX_COMFY_QUEUE', '1'))
+app.config['MAX_CONTENT_LENGTH'] = MAX_IMAGE_MB * 1024 * 1024
+
+
+def comfy_headers():
+    if not COMFY_PROXY_TOKEN:
+        return {}
+    return {'Authorization': f'Bearer {COMFY_PROXY_TOKEN}'}
+
+
+def comfy_get(path, **kwargs):
+    return requests.get(f'{COMFYUI_URL}{path}', headers=comfy_headers(), **kwargs)
+
+
+def comfy_post(path, **kwargs):
+    headers = kwargs.pop('headers', {}) or {}
+    headers.update(comfy_headers())
+    return requests.post(f'{COMFYUI_URL}{path}', headers=headers, **kwargs)
+
+
+def active_job_count():
+    return sum(1 for order in orders.values() if order.get('status') == 'processing')
+
+
+def trim_old_orders():
+    if len(orders) <= MAX_STORED_ORDERS:
+        return
+    removable = [oid for oid, order in sorted(orders.items(), key=lambda item: item[1].get('created_at', '')) if order.get('status') != 'processing']
+    for oid in removable[:max(0, len(orders) - MAX_STORED_ORDERS)]:
+        orders.pop(oid, None)
+
+
+def validate_upload_file(img):
+    if img.filename == '':
+        return '請選擇檔案'
+    if request.content_length and request.content_length > app.config['MAX_CONTENT_LENGTH']:
+        return f'圖片太大，最大 {MAX_IMAGE_MB}MB'
+    if img.content_type and not img.content_type.startswith('image/'):
+        return '只允許上傳圖片檔'
+    return None
+
+
+def comfy_queue_too_long():
+    try:
+        r = comfy_get('/queue', timeout=5)
+        if r.status_code != 200:
+            return False
+        q = r.json()
+        running = len(q.get('queue_running', []))
+        pending = len(q.get('queue_pending', []))
+        return running + pending >= MAX_COMFY_QUEUE
+    except Exception:
+        return False
+
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({'error': f'圖片太大，最大 {MAX_IMAGE_MB}MB'}), 413
 
 def upload_to_comfyui(filepath, original_filename, content_type):
     """Upload an image to ComfyUI and return the filename LoadImage should use."""
     with open(filepath, 'rb') as f:
         files = {'image': (original_filename, f, content_type or 'application/octet-stream')}
         data = {'type': 'input', 'overwrite': 'true'}
-        resp = requests.post(f'{COMFYUI_URL}/upload/image', files=files, data=data, timeout=30)
+        resp = comfy_post('/upload/image', files=files, data=data, timeout=30)
     if resp.status_code != 200:
         raise RuntimeError(f'ComfyUI 上傳失敗: {resp.text[:500]}')
     result = resp.json()
@@ -303,7 +365,7 @@ def index():
 def api_status():
     comfy_ok = False
     try:
-        r = requests.get(f'{COMFYUI_URL}/history', timeout=5)
+        r = comfy_get('/history', timeout=5)
         if r.status_code == 200:
             comfy_ok = True
     except:
@@ -312,7 +374,8 @@ def api_status():
     return jsonify({
         'status': 'ok',
         'comfyui_connected': comfy_ok,
-        'comfyui_url': COMFYUI_URL,
+        'comfyui_url': 'protected' if COMFY_PROXY_TOKEN else COMFYUI_URL,
+        'comfyui_protected': bool(COMFY_PROXY_TOKEN),
         'free_use': FREE_USE
     })
 
@@ -357,14 +420,16 @@ def upload_image():
         return jsonify({'error': '沒有圖片'}), 400
     
     img = request.files['image']
-    if img.filename == '':
-        return jsonify({'error': '空的檔案名'}), 400
+    upload_error = validate_upload_file(img)
+    if upload_error:
+        return jsonify({'error': upload_error}), 400
     
     # 儲存圖片到本地 input_images
     save_dir = os.path.join(os.path.dirname(__file__), 'input_images')
     os.makedirs(save_dir, exist_ok=True)
     
-    filename = f"upload_{uuid.uuid4().hex[:8]}_{img.filename}"
+    safe_name = os.path.basename(img.filename).replace(' ', '_')
+    filename = f"upload_{uuid.uuid4().hex[:8]}_{safe_name}"
     filepath = os.path.join(save_dir, filename)
     
     try:
@@ -375,14 +440,14 @@ def upload_image():
         
         if is_remote:
             # Upload through ComfyUI's native API so LoadImage can find the file.
-            comfy_filename = upload_to_comfyui(filepath, img.filename, img.content_type)
+            comfy_filename = upload_to_comfyui(filepath, safe_name, img.content_type)
         else:
             # 本地模式：複製到 ComfyUI input 資料夾
             comfy_input_dir = COMFYUI_INPUT_DIR
             os.makedirs(comfy_input_dir, exist_ok=True)
             import datetime
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            comfy_filename = f"upload_{timestamp}_{img.filename}"
+            comfy_filename = f"upload_{timestamp}_{safe_name}"
             comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
             shutil.copy2(filepath, comfy_filepath)
         
@@ -401,14 +466,16 @@ def upload_secondary_image():
         return jsonify({'error': '沒有圖片'}), 400
     
     img = request.files['image']
-    if img.filename == '':
-        return jsonify({'error': '空的檔案名'}), 400
+    upload_error = validate_upload_file(img)
+    if upload_error:
+        return jsonify({'error': upload_error}), 400
     
     # 儲存圖片到本地 input_images
     save_dir = os.path.join(os.path.dirname(__file__), 'input_images')
     os.makedirs(save_dir, exist_ok=True)
     
-    filename = f"upload_secondary_{uuid.uuid4().hex[:8]}_{img.filename}"
+    safe_name = os.path.basename(img.filename).replace(' ', '_')
+    filename = f"upload_secondary_{uuid.uuid4().hex[:8]}_{safe_name}"
     filepath = os.path.join(save_dir, filename)
     
     try:
@@ -416,7 +483,7 @@ def upload_secondary_image():
         is_remote = not COMFYUI_URL.startswith('http://127.0.0.1') and not COMFYUI_URL.startswith('http://localhost')
         
         if is_remote:
-            comfy_filename = upload_to_comfyui(filepath, img.filename, img.content_type)
+            comfy_filename = upload_to_comfyui(filepath, safe_name, img.content_type)
         else:
             # Copy to the local ComfyUI input directory.
             comfy_input_dir = COMFYUI_INPUT_DIR
@@ -424,7 +491,7 @@ def upload_secondary_image():
             
             import datetime
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            comfy_filename = f"secondary_{timestamp}_{img.filename}"
+            comfy_filename = f"secondary_{timestamp}_{safe_name}"
             comfy_filepath = os.path.join(comfy_input_dir, comfy_filename)
             shutil.copy2(filepath, comfy_filepath)
 
@@ -450,6 +517,11 @@ def submit_order():
     
     if not image_filename or not prompt_text:
         return jsonify({'error': '需要圖片和描述'}), 400
+    if active_job_count() >= MAX_ACTIVE_JOBS:
+        return jsonify({'error': '目前任務已滿，請稍後再試'}), 429
+    if comfy_queue_too_long():
+        return jsonify({'error': 'ComfyUI 佇列已滿，請稍後再試'}), 429
+    trim_old_orders()
     
     order_id = str(uuid.uuid4())[:8]
     
@@ -515,7 +587,7 @@ def download_result(order_id):
         return jsonify({'error': '結果不存在或未完成'}), 404
     
     try:
-        r = requests.get(order['result_url'])
+        r = requests.get(order['result_url'], headers=comfy_headers())
         if r.status_code == 200:
             from flask import Response
             return Response(
@@ -533,7 +605,7 @@ def download_result(order_id):
 def check_comfyui(prompt_id):
     """檢查 ComfyUI 任務狀態"""
     try:
-        r = requests.get(f'{COMFYUI_URL}/history', timeout=10)
+        r = comfy_get('/history', timeout=10)
         if r.status_code == 200:
             history = r.json()
             if prompt_id in history:
@@ -589,7 +661,7 @@ def process_img2img(order_id):
             'client_id': order_id
         }
         
-        r = requests.post(f'{COMFYUI_URL}/prompt', json=payload, timeout=30)
+        r = comfy_post('/prompt', json=payload, timeout=30)
         
         if r.status_code == 200:
             result = r.json()
