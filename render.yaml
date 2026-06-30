@@ -7,7 +7,17 @@ services:
       - key: NGROK_URL
         value: https://congested-drizzle-unpinned.ngrok-free.dev
       - key: COMFYUI_URL
-        value: http://localhost:8188
+        value: https://congested-drizzle-unpinned.ngrok-free.dev
+      - key: COMFY_PROXY_TOKEN
+        sync: false
+      - key: MAX_IMAGE_MB
+        value: "10"
+      - key: MAX_ACTIVE_JOBS
+        value: "1"
+      - key: MAX_STORED_ORDERS
+        value: "50"
+      - key: MAX_COMFY_QUEUE
+        value: "1"
       - key: COMFYUI_INPUT_DIR
         value: /tmp/comfyui_input
       - key: FREE_USE
