@@ -37,9 +37,11 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_IMAGE_MB * 1024 * 1024
 
 
 def comfy_headers():
+    headers = {'ngrok-skip-browser-warning': 'true'}
     if not COMFY_PROXY_TOKEN:
-        return {}
-    return {'Authorization': f'Bearer {COMFY_PROXY_TOKEN}'}
+        return headers
+    headers['Authorization'] = f'Bearer {COMFY_PROXY_TOKEN}'
+    return headers
 
 
 def comfy_get(path, **kwargs):
